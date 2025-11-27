@@ -121,11 +121,11 @@ We employ a Hybrid Ensemble Approach to maximize accuracy across diverse traffic
 
 
 ## **Performance Strategy**
-Component,Metric,Action
-Class Imbalance,High,Use scale_pos_weight in XGBoost + SMOTE for rare apps.
-Drift,Weekly,Monitor KL-Divergence on TLS_SNI distributions.
-Scaling,Mixed,Log-transform for Bytes; Standard Scaling for Neural Nets.
-
+| Component | Metric | Action |
+| :--- | :--- | :--- |
+| **Class Imbalance** | High | Use `scale_pos_weight` in **XGBoost** + **SMOTE** for rare apps. |
+| **Drift** | Weekly | Monitor **KL-Divergence** on TLS_SNI distributions. |
+| **Scaling** | Mixed | **Log-transform** ($log(1+x)$) for Bytes; **Standard Scaling** for Neural Nets. |
 
 
 ## *#Implementation**
@@ -144,6 +144,5 @@ Scaling,Mixed,Log-transform for Bytes; Standard Scaling for Neural Nets.
 **Dataset:**
 I used the [CESNET-TLS-Year22 dataset][cesnet-data] for this project. The paper describing it is available on [Nature Scientific Data][cesnet-data].
 
-... (at the end of the README.md) ...
 
 [cesnet-data]: https://www.nature.com/articles/s41597-024-03927-4
