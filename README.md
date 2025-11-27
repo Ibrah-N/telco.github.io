@@ -97,3 +97,53 @@ def ingest_data(input_path, output_path):
     df_clean.write.partitionBy('Week', 'APP').parquet(output_path)
 ```
 
+
+
+## **Machine Learning Methodology**
+We employ a Hybrid Ensemble Approach to maximize accuracy across diverse traffic types.
+
+#### **Model A: The "Sprinter" (XGBoost)**
+
+**Input**: Statistical aggregates (Total Bytes, Duration, Packet Counts, Histogram Bins).
+
+**Why**: Fast training, handles class imbalance via weights, and provides interpretability.
+
+**Target:**: General traffic categorization (Streaming vs. Web).
+
+#### **Model B: The "Deep Diver" (LSTM)**
+
+**Input:** Raw Packet Sequence (PPI) - Size, Direction, and Inter-arrival time of the first 30 packets.
+
+**Why:** Captures the "rhythm" of the traffic. (e.g., A Zoom call has a distinct packet cadence compared to YouTube, even if byte counts are similar).
+
+**Target:** Fine-grained application identification.
+
+
+
+## **Performance Strategy**
+Component,Metric,Action
+Class Imbalance,High,Use scale_pos_weight in XGBoost + SMOTE for rare apps.
+Drift,Weekly,Monitor KL-Divergence on TLS_SNI distributions.
+Scaling,Mixed,Log-transform for Bytes; Standard Scaling for Neural Nets.
+
+
+
+## *#Implementation**
+
+#### **Prerequisites**
+```
+ - Python 3.9+
+
+ - cesnet-datazoo (for dataset download)
+
+ - pyspark & pytorch
+```
+
+
+## **References**
+**Dataset:**
+I used the [CESNET-TLS-Year22 dataset][cesnet-data] for this project. The paper describing it is available on [Nature Scientific Data][cesnet-data].
+
+... (at the end of the README.md) ...
+
+[cesnet-data]: https://www.nature.com/articles/s41597-024-03927-4
