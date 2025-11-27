@@ -1,163 +1,99 @@
+# 📡 Sentinel-Flow: Telco Traffic Intelligence
+### Scalable TLS Analysis & Capacity Forecasting
 
-Project: TelcoTraffic — AI-Driven Network Intelligence
-Scalable TLS Traffic Analysis for Service Discovery & Capacity Planning
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=for-the-badge&logo=python)
+![Spark](https://img.shields.io/badge/Apache_Spark-3.2-orange?style=for-the-badge&logo=apachespark)
+![Pytorch](https://img.shields.io/badge/PyTorch-2.0-red?style=for-the-badge&logo=pytorch)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-Status: 🟢 Active | Stack: Apache Spark, PyTorch, XGBoost, CESNET DataZoo | Data: 1 Year Backbone Traffic
+> **Deployment Status:** 🟢 Active | **Data:** CESNET-TLS-Year22 (1 Year Backbone Traffic)
 
-1. Executive Summary & Problem Framing
-In the modern telecommunications landscape, encrypted traffic (TLS) obscures visibility into network usage. This project implements a Big Data pipeline to analyze TLS traffic patterns without decryption, leveraging the CESNET-TLS-Year22 dataset.
+---
 
-The Goal: Build a scalable system to identify emerging services, forecast capacity needs, and detect market shifts for a Telecom Operator.
+## **Executive Summary**
+**Sentinel-Flow** is a Big Data ML pipeline designed for **Telecommunication Operators**. It solves the "Encryption Blindness" problem by analyzing **TLS traffic patterns** without decryption. 
 
-Key Objectives:
+By leveraging the [CESNET-TLS-Year22 Dataset](https://zenodo.org/records/10608607), this system identifies emerging services, forecasts network capacity, and detects market shifts using privacy-preserving metadata.
 
-Service Classification: Identify specific apps (e.g., Netflix, Teams) from encrypted flow features for product usage analytics.
+### **Key Objectives**
+1.  **Service Classification:** Identify apps (Netflix, Teams, Zoom) from encrypted flows for product analytics.
+2.  **Capacity Forecasting:** Predict aggregate bytes/flows per service to optimize provisioning.
+3.  **Anomaly Detection:** Discover unknown services or behavioral shifts (Data Drift).
 
-Capacity Forecasting: Predict aggregate bytes/flows per service to optimize network provisioning.
+---
 
-Anomaly Detection: Discover unknown services or behavioral shifts indicating new market trends (Data Drift).
+## ** System Architecture**
 
-2. System Architecture: The Big Data Pipeline
-This system handles multi-TB scale data through a decoupled storage and compute architecture.
+We utilize a decoupled architecture separating **Storage** (S3/HDFS) from **Compute** (Spark/GPU).
 
-High-Level Data Flow
-
-Ingestion → Raw Storage → Feature Store → Model Training → Serving → Monitoring
-
-Pipeline Visualization:
-
-Code snippet
+```mermaid
 graph TD
-    A[Raw CESNET CSVs] -->|Spark Batch Ingestion| B(Raw Storage S3/HDFS)
-    B -->|Parquet Conversion| C{Feature Store}
-    C -->|Aggregates| D[Forecasting Models]
-    C -->|Flow Features| E[Classification Models]
-    D & E --> F[Model Registry MLFlow]
-    F --> G[Dashboards & Reporting]
-    G --> H[Drift Monitoring]
-    H -->|Trigger| A
-Technology Stack:
+    subgraph "Phase 1: Ingestion & Storage"
+    A[Raw CESNET CSVs] -->|Spark Batch| B(Raw Storage S3)
+    B -->|Parquet Conv| C{Feature Store}
+    end
+    
+    subgraph "Phase 2: Processing"
+    C -->|Aggregates| D[Forecasting Data]
+    C -->|Flow Stats + PPI| E[Classification Data]
+    end
+    
+    subgraph "Phase 3: Hybrid Modeling"
+    E -->|Structured| F[XGBoost Model]
+    E -->|Sequences| G[LSTM / 1D-CNN]
+    F & G --> H[Ensemble Inference]
+    end
+    
+    subgraph "Phase 4: Serving"
+    H --> I[Product Dashboard]
+    D --> J[Capacity Planning]
+    I & J --> K[Drift Monitor]
+    K -->|Trigger Retrain| A
+    end
 
-Ingestion: Apache Spark (PySpark) on YARN/EMR.
+```
 
-Storage: AWS S3 (Raw), Delta Lake (Feature Store).
-
-Orchestration: Apache Airflow.
-
-Model Registry: MLflow.
-
-3. Data Engineering Strategy
-3.1 Dataset
-
-We utilize the CESNET-TLS-Year22 dataset, a privacy-preserving dataset of real-world traffic.
+## **Data Pipeline (ETL)**
+# 1. The Dataset
 
 Source: Nature Scientific Data Paper
 
-Access: Zenodo Record
+Volume: Multi-Terabyte scale, partitioned by Week.
 
-Tooling: We utilize the CESNET DataZoo API for standardized partitioning.
+Format: Compressed CSVs containing flow stats, histograms, and PPI (Packet Payload Information).
 
-3.2 Ingestion Logic (Apache Spark)
 
-Due to the dataset's size (Year-long, compressed CSVs), we utilize Spark for distributed processing.
 
-Job A (Parsing): Decompresses CSVs, parses PPI (Packet Packet Information) arrays, and partitions by TIME_FIRST (Week) and APP.
+## **2. Ingestion Strategy (Apache Spark)**
 
-Job B (Aggregation): Computes hourly/daily sums of BYTES and PACKETS for time-series forecasting.
+We use PySpark to handle the massive scale of the Year22 dataset.
 
-Job C (Feature Extraction): Extracts TLS fields (JA3, SNI) and handles high-cardinality hashing.
+```
+Key Transformations:
 
-Snippet: Ingestion Logic
+Parsing: Extract PPI arrays from string representations.
 
-Python
-# PySpark Ingestion Logic
-df = spark.read.csv('s3://cesnet/raw/*.csv.gz', schema=schema) \
-    .withColumn('TIME_FIRST', to_timestamp(col('TIME_FIRST'))) \
-    .withColumn('PPI_First', parse_ppi_udf(col('PPI'))) 
+Imputation: Fill missing TLS_SNI with placeholder tokens; Pad sequences to length 30.
 
-# Partitioning for optimized querying
-df.repartition(200).write.format('parquet') \
-    .partitionBy('year', 'week', 'app_label') \
-    .save('s3://telco/cesnet/feature_store/')
-4. Machine Learning Methodology
-We employ a Hybrid Modeling Approach combining Tree-based models for structured data and Sequence models for packet timing.
+Partitioning: Data is stored in Parquet format, partitioned by Year/Week for fast time-travel querying.
 
-4.1 Feature Engineering
+```
 
-Sequence Features: PPI (Packet Payload Information) sequences are padded to length 30.
 
-Categorical Encoding:s
+## **Python**
+```
+# Example: PySpark Ingestion Logic
+from pyspark.sql import functions as F
 
-Low Cardinality: One-Hot Encoding (Protocol, Flags).
+def ingest_data(input_path, output_path):
+    df = spark.read.csv(input_path, header=True, schema=schema)
+    
+    # Feature Engineering on the fly
+    df_clean = df.withColumn('PPI_Parsed', parse_ppi_udf(F.col('PPI'))) \
+                 .withColumn('Week', F.weekofyear(F.col('TIME_FIRST'))) \
+                 .fillna({'TLS_SNI': 'UNKNOWN'})
 
-High Cardinality (SNI, JA3): Target Encoding or Hashing Trick to avoid sparse matrices.
+    # Write to Feature Store partitioned by Time
+    df_clean.write.partitionBy('Week', 'APP').parquet(output_path)
+```
 
-Scaling: * Trees: Log-transform log(1+x) for skewed distributions (Bytes).
-
-Neural Nets: Standard Scaling (z= 
-σ
-x−μ
-​	
- ).
-
-4.2 Model Architecture
-
-Task	Primary Model	Why?
-A. Service Classification	XGBoost / LightGBM	Handles class imbalance, interpretable feature importance, robust to missing values.
-B. Sequence Analysis	LSTM / 1D-CNN	Captures temporal dependencies in packet inter-arrival times that summary stats miss.
-C. Forecasting	Prophet / TFT	Handles seasonality (daily/weekly) and holidays for capacity planning.
-4.3 Implementation Strategy
-
-Hybrid Ensemble: We stack the probability outputs of the LSTM (Sequence data) with the XGBoost model (Flow stats) to maximize Macro F1 score.
-
-Pseudo-Code: Training Pipeline
-
-Python
-# 1. Structured Learning (XGBoost)
-dtrain = xgboost.DMatrix(data=X_structured, label=y, weight=class_weights)
-bst = xgboost.train(params={'objective': 'multi:softprob'}, dtrain=dtrain)
-
-# 2. Sequence Learning (LSTM/Keras)
-model = Sequential([
-    Masking(mask_value=0., input_shape=(30, 3)),
-    LSTM(64, return_sequences=False),
-    Dense(num_classes, activation='softmax')
-])
-model.fit(X_sequences, y)
-
-# 3. Ensemble (Stacking)
-ensemble_preds = (w1 * bst.predict(X_val)) + (w2 * model.predict(X_val_seq))
-5. Results & Evaluation
-Metrics
-
-Classification: Macro F1 Score (Critical for imbalanced classes like rare apps).
-
-Forecasting: RMSE (Root Mean Square Error) and MAPE (Mean Absolute Percentage Error).
-
-Drift: Kullback-Leibler Divergence on feature histograms.
-
-Findings
-
-Tree models proved superior for "Category" classification (Video vs. Chat).
-
-Sequence models significantly improved detection of encrypted tunnel traffic (VPNs) by analyzing packet inter-arrival times.
-
-Capacity Forecasting successfully predicted 90% of traffic peaks with a 24-hour horizon using XGBoost on lag features.
-
-6. Operationalization & Future Work
-Monitoring
-
-We utilize Concept Drift Detection (ADWIN or MFWDD). If the distribution of TLS_SNI or PPI sequences deviates significantly, the Retraining Pipeline is triggered automatically via Airflow.
-
-Next Steps
-
-Graph Analytics: Implement Graph Neural Networks (GNN) to map relationships between Source IPs and Destination ASNs to detect botnets.
-
-Privacy: Explore Federated Learning to train on edge nodes without centralizing raw flow logs.
-
-7. References & Resources
-Dataset Paper: CESNET-TLS-Year22: A year-spanning TLS network traffic dataset
-
-Download: Zenodo Repository
-
-Tools: CESNET DataZoo | CESNET Models
