@@ -128,16 +128,60 @@ We employ a Hybrid Ensemble Approach to maximize accuracy across diverse traffic
 | **Scaling** | Mixed | **Log-transform** ($log(1+x)$) for Bytes; **Standard Scaling** for Neural Nets. |
 
 
-## *#Implementation**
+## **Implementation**
 
-#### **Prerequisites**
+This section details the necessary environment setup and the commands to run the data downloading and model training pipeline.
+
+---
+
+### 📦 Prerequisites
+
+Ensure you have the following software and libraries installed before proceeding.
+
+* **Python 3.9+** (Recommended for PyTorch and PySpark compatibility)
+* **Apache Spark** (Environment configured for cluster mode, e.g., YARN/EMR/Dataproc)
+* Required Python packages: `pyspark`, `pytorch`, `xgboost`.
+
+---
+
+### Running the Pipeline
+
+#### 1. Download and Prepare Data
+
+Use the `cesnet-datazoo` API to download and locally partition a sample week of the CESNET-TLS-Year22 dataset.
+
+```bash
+# Install the required data handling tool
+pip install cesnet-datazoo
+
+# Execute the download script for a sample week (e.g., 2022-01)
+python src/download.py --week 2022-01
+
 ```
- - Python 3.9+
 
- - cesnet-datazoo (for dataset download)
+#### Train the Hybrid Model
 
- - pyspark & pytorch
+The final training step involves orchestrating the Tree Model (XGBoost) and the Sequence Model (LSTM/PyTorch) and combining their predictions via a weighted ensemble.
+
+```bash
+# Pseudo-code for Hybrid Training Pipeline
+
+# 1. Train Tree Model on structured flow features
+params = {'objective': 'multi:softprob', 'eta': 0.05, 'max_depth': 8}
+bst = xgboost.train(params, dtrain)
+
+# 2. Train Sequence Model on PPI sequences (requires GPU)
+lstm = build_lstm(input_shape=(30, 3)) # (Sequence Length, Feature Dimensions)
+lstm.fit(sequence_data, labels)
+
+# 3. Ensemble Predictions (Weighted Average)
+# Weights (0.6, 0.4) are determined via validation set optimization.
+tree_preds = bst.predict(X)
+sequence_preds = lstm.predict(X_seq)
+
+final_pred = (0.6 * tree_preds) + (0.4 * sequence_preds)
 ```
+
 
 
 ## **References**
